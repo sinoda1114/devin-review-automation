@@ -1,0 +1,123 @@
+name: Devin PR Automation
+
+on:
+  workflow_call:
+    inputs:
+      automation-repository:
+        description: Repository that contains the Devin automation scripts.
+        required: true
+        type: string
+      automation-ref:
+        description: Git ref of the automation repository.
+        required: false
+        type: string
+        default: main
+      config-path:
+        description: Path to the project-local configuration file.
+        required: false
+        type: string
+        default: .github/devin-automation.yml
+      quality-commands:
+        description: Optional newline-separated quality commands. Overrides config quality.commands.
+        required: false
+        type: string
+        default: ""
+      max-changed-files:
+        description: Optional Risk Gate override.
+        required: false
+        type: string
+        default: ""
+      max-diff-lines:
+        description: Optional Risk Gate override.
+        required: false
+        type: string
+        default: ""
+      max-autofix-count:
+        description: Optional Risk Gate override.
+        required: false
+        type: string
+        default: ""
+      require-devin-review-signal:
+        description: Whether a Devin Review signal is required.
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      AUTOMATION_TOKEN:
+        description: Optional token used to checkout a private automation repository.
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+  checks: read
+
+jobs:
+  quality-gate:
+    name: PR Quality Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          path: target
+
+      - name: Checkout automation repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.automation-repository }}
+          ref: ${{ inputs.automation-ref }}
+          path: automation
+          token: ${{ secrets.AUTOMATION_TOKEN || github.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run PR Quality Gate
+        working-directory: target
+        env:
+          DEVIN_AUTOMATION_CONFIG: ${{ inputs.config-path }}
+          QUALITY_COMMANDS: ${{ inputs.quality-commands }}
+        run: node ../automation/scripts/quality-gate.mjs
+
+  risk-gate:
+    name: Risk Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: target
+
+      - name: Checkout automation repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.automation-repository }}
+          ref: ${{ inputs.automation-ref }}
+          path: automation
+          token: ${{ secrets.AUTOMATION_TOKEN || github.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run Risk Gate
+        working-directory: target
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEVIN_AUTOMATION_CONFIG: ${{ inputs.config-path }}
+          MAX_CHANGED_FILES: ${{ inputs.max-changed-files }}
+          MAX_DIFF_LINES: ${{ inputs.max-diff-lines }}
+          MAX_AUTOFIX_COUNT: ${{ inputs.max-autofix-count }}
+          REQUIRE_DEVIN_REVIEW_SIGNAL: ${{ inputs.require-devin-review-signal }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node ../automation/scripts/risk-gate.mjs

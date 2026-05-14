@@ -1,0 +1,11 @@
+{
+  "name": "devin-review-automation",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "devin-review-automation": "scripts/init.mjs"
+  },
+  "scripts": {
+    "check": "node --check scripts/automation-config.mjs && node --check scripts/quality-gate.mjs && node --check scripts/risk-gate.mjs && node --check scripts/init.mjs"
+  }
+}
